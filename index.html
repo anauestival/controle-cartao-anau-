@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="true">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Controle Cartão">
+    <meta name="theme-color" content="#1e40af">
+    <meta name="description" content="Controle de cartão de crédito Anauê">
+    
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%231e40af' width='192' height='192'/><text x='50%' y='50%' font-size='100' font-weight='bold' fill='white' text-anchor='middle' dy='.3em'>💳</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect fill='%231e40af' width='180' height='180' rx='40'/><text x='50%' y='50%' font-size='90' font-weight='bold' fill='white' text-anchor='middle' dy='.3em'>💳</text></svg>">
+    
+    <link rel="stylesheet" href="styles.css">
+    <title>Controle Cartão Anauê</title>
+</head>
+<body>
+    <div id="app" class="app-container">
+        <!-- DASHBOARD -->
+        <section id="dashboard" class="screen active">
+            <div class="screen-header">
+                <h1>Dashboard</h1>
+            </div>
+            <div class="screen-content">
+                <!-- Cards de Resumo -->
+                <div class="summary-cards">
+                    <div class="summary-card">
+                        <div class="summary-label">Total Mês</div>
+                        <div class="summary-value" id="totalMonth">R$ 0,00</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">Total Cartão</div>
+                        <div class="summary-value" id="totalCard">R$ 0,00</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">Total Pessoa</div>
+                        <div class="summary-value" id="totalPerson">R$ 0,00</div>
+                    </div>
+                </div>
+
+                <!-- Totais por Mês -->
+                <div class="section">
+                    <h2>Totais por Mês</h2>
+                    <div id="monthTotals" class="totals-list"></div>
+                </div>
+
+                <!-- Totais por Cartão -->
+                <div class="section">
+                    <h2>Totais por Cartão</h2>
+                    <div id="cardTotals" class="totals-list"></div>
+                </div>
+
+                <!-- Totais por Pessoa -->
+                <div class="section">
+                    <h2>Totais por Pessoa</h2>
+                    <div id="personTotals" class="totals-list"></div>
+                </div>
+
+                <!-- Gráfico de Gastos -->
+                <div class="section">
+                    <h2>Gastos (Últimos 6 Meses)</h2>
+                    <canvas id="spendChart" class="chart-canvas"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- LANÇAR COMPRA -->
+        <section id="purchase" class="screen">
+            <div class="screen-header">
+                <h1>Lançar Compra</h1>
+            </div>
+            <div class="screen-content">
+                <form id="purchaseForm" class="form">
+                    <div class="form-group">
+                        <label for="purchaseCard">Cartão *</label>
+                        <select id="purchaseCard" required>
+                            <option value="">Selecione um cartão</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="purchaseDate">Data da Compra *</label>
+                        <input type="date" id="purchaseDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="purchaseDescription">Descrição *</label>
+                        <input type="text" id="purchaseDescription" placeholder="Ex: Supermercado" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="purchaseClassification">Classificação *</label>
+                        <select id="purchaseClassification" required>
+                            <option value="">Selecione uma classificação</option>
+                            <option value="Alimentação">Alimentação</option>
+                            <option value="Combustível">Combustível</option>
+                            <option value="Saúde">Saúde</option>
+                            <option value="Lazer">Lazer</option>
+                            <option value="Casa">Casa</option>
+                            <option value="Educação">Educação</option>
+                            <option value="Transporte">Transporte</option>
+                            <option value="Outros">Outros</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="purchaseAmount">Valor Total (R$) *</label>
+                        <input type="number" id="purchaseAmount" placeholder="0.00" min="0" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="purchaseInstallments">Número de Parcelas *</label>
+                        <input type="number" id="purchaseInstallments" min="1" max="24" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="purchasePerson">Responsável *</label>
+                        <input type="text" id="purchasePerson" placeholder="Ex: João" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Lançar Compra</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- CONSULTA -->
+        <section id="query" class="screen">
+            <div class="screen-header">
+                <h1>Consulta</h1>
+            </div>
+            <div class="screen-content">
+                <!-- Filtros -->
+                <div class="filter-section">
+                    <h2>Filtros</h2>
+                    <div class="filter-group">
+                        <div class="filter-item">
+                            <label for="filterYear">Ano</label>
+                            <select id="filterYear">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label for="filterMonth">Mês</label>
+                            <select id="filterMonth">
+                                <option value="">Todos</option>
+                                <option value="1">Janeiro</option>
+                                <option value="2">Fevereiro</option>
+                                <option value="3">Março</option>
+                                <option value="4">Abril</option>
+                                <option value="5">Maio</option>
+                                <option value="6">Junho</option>
+                                <option value="7">Julho</option>
+                                <option value="8">Agosto</option>
+                                <option value="9">Setembro</option>
+                                <option value="10">Outubro</option>
+                                <option value="11">Novembro</option>
+                                <option value="12">Dezembro</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <div class="filter-item">
+                            <label for="filterCard">Cartão</label>
+                            <select id="filterCard">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                        <div class="filter-item">
+                            <label for="filterClassification">Classificação</label>
+                            <select id="filterClassification">
+                                <option value="">Todas</option>
+                                <option value="Alimentação">Alimentação</option>
+                                <option value="Combustível">Combustível</option>
+                                <option value="Saúde">Saúde</option>
+                                <option value="Lazer">Lazer</option>
+                                <option value="Casa">Casa</option>
+                                <option value="Educação">Educação</option>
+                                <option value="Transporte">Transporte</option>
+                                <option value="Outros">Outros</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-group">
+                        <div class="filter-item">
+                            <label for="filterPerson">Responsável</label>
+                            <select id="filterPerson">
+                                <option value="">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary" id="clearFiltersBtn">Limpar Filtros</button>
+                </div>
+
+                <!-- Total Filtrado -->
+                <div class="filter-total">
+                    <span>Total Filtrado:</span>
+                    <span id="filteredTotal" class="total-value">R$ 0,00</span>
+                </div>
+
+                <!-- Lista de Registros -->
+                <div class="records-section">
+                    <div id="recordsList" class="records-list"></div>
+                </div>
+            </div>
+
+            <!-- Modal Editar Registro -->
+            <div id="editModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Editar Registro</h2>
+                        <button class="btn-close" id="closeEditModal">&times;</button>
+                    </div>
+                    <form id="editForm" class="form">
+                        <input type="hidden" id="editRecordId">
+                        <div class="form-group">
+                            <label for="editDate">Data da Compra *</label>
+                            <input type="date" id="editDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editDescription">Descrição *</label>
+                            <input type="text" id="editDescription" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editClassification">Classificação *</label>
+                            <select id="editClassification" required>
+                                <option value="Alimentação">Alimentação</option>
+                                <option value="Combustível">Combustível</option>
+                                <option value="Saúde">Saúde</option>
+                                <option value="Lazer">Lazer</option>
+                                <option value="Casa">Casa</option>
+                                <option value="Educação">Educação</option>
+                                <option value="Transporte">Transporte</option>
+                                <option value="Outros">Outros</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="editAmount">Valor Parcela (R$) *</label>
+                            <input type="number" id="editAmount" placeholder="0.00" min="0" step="0.01" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editPerson">Responsável *</label>
+                            <input type="text" id="editPerson" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Salvar</button>
+                            <button type="button" class="btn btn-danger" id="deleteRecordBtn">Deletar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- CARTÕES -->
+        <section id="cards" class="screen">
+            <div class="screen-header">
+                <h1>Cartões</h1>
+                <button class="btn-icon" id="addCardBtn" title="Adicionar cartão">
+                    <span>➕</span>
+                </button>
+            </div>
+            <div class="screen-content">
+                <div id="cardsList" class="cards-list"></div>
+            </div>
+
+            <!-- Modal Adicionar/Editar Cartão -->
+            <div id="cardModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 id="cardModalTitle">Novo Cartão</h2>
+                        <button class="btn-close" id="closeCardModal">&times;</button>
+                    </div>
+                    <form id="cardForm" class="form">
+                        <input type="hidden" id="cardId">
+                        <div class="form-group">
+                            <label for="cardName">Nome do Cartão *</label>
+                            <input type="text" id="cardName" placeholder="Ex: Nubank" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="cardDueDay">Dia de Vencimento *</label>
+                            <input type="number" id="cardDueDay" min="1" max="31" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Salvar</button>
+                            <button type="button" class="btn btn-danger" id="deleteCardBtn" style="display:none;">Deletar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB BAR -->
+        <nav class="tab-bar">
+            <button class="tab-item active" data-tab="dashboard" title="Dashboard">
+                <span class="tab-icon">📊</span>
+                <span class="tab-label">Dashboard</span>
+            </button>
+            <button class="tab-item" data-tab="purchase" title="Lançar Compra">
+                <span class="tab-icon">➕</span>
+                <span class="tab-label">Compra</span>
+            </button>
+            <button class="tab-item" data-tab="query" title="Consulta">
+                <span class="tab-icon">🔍</span>
+                <span class="tab-label">Consulta</span>
+            </button>
+            <button class="tab-item" data-tab="cards" title="Cartões">
+                <span class="tab-icon">💳</span>
+                <span class="tab-label">Cartões</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
