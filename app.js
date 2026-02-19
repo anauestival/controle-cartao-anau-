@@ -194,7 +194,14 @@ function deleteRecordsByParentId(parentId) {
 
 async function launchPurchase(cardId, purchaseDate, description, classification, totalAmount, installments, person) {
     try {
-        const date = new Date(purchaseDate);
+        // Converter data DD/MM/YYYY para Date
+        let date;
+        if (purchaseDate.includes('/')) {
+            const [day, month, year] = purchaseDate.split('/').map(Number);
+            date = new Date(year, month - 1, day);
+        } else {
+            date = new Date(purchaseDate);
+        }
         const year = date.getFullYear();
         const month = date.getMonth() + 1;
         const card = await getCardById(cardId);
@@ -366,6 +373,16 @@ function formatCurrency(value) {
 }
 
 function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    
+    // Se estiver em formato DD/MM/YYYY, converter
+    if (dateString.includes('/')) {
+        const [day, month, year] = dateString.split('/').map(Number);
+        const date = new Date(year, month - 1, day);
+        return date.toLocaleDateString('pt-BR');
+    }
+    
+    // Se estiver em formato YYYY-MM-DD
     const date = new Date(dateString + 'T00:00:00');
     return date.toLocaleDateString('pt-BR');
 }
@@ -670,7 +687,8 @@ async function updateQueryRecords() {
         }
 
         recordsList.innerHTML = records.map(record => `
-            <div class="record-item" onclick="openEditModal(${record.id})">
+            <div class="record-item ${selectedRecordsForDelete.has(record.id) ? 'selected' : ''}" ${deleteMode ? `onclick="toggleRecordSelection(${record.id})"` : `onclick="openEditModal(${record.id})"`}>
+                ${deleteMode ? `<div class="record-checkbox"><input type="checkbox" ${selectedRecordsForDelete.has(record.id) ? 'checked' : ''} onclick="event.stopPropagation(); toggleRecordSelection(${record.id})"></div>` : ''}
                 <div class="record-header">
                     <div class="record-title">${record.descricao}</div>
                     <div class="record-date">${formatDate(record.data)}</div>
@@ -913,7 +931,197 @@ document.getElementById('deleteCardBtn')?.addEventListener('click', async () => 
 });
 
 // ============================================
-// NAVEGAÇÃO TAB BAR
+// EXPORTAÇÃO DE DADOS
+// ============================================
+
+let selectedRecordsForDelete = new Set();
+let deleteMode = false;
+
+function toggleDeleteMode() {
+    deleteMode = !deleteMode;
+    const trashBtn = document.getElementById('trashBtn');
+    const recordsList = document.getElementById('recordsList');
+    
+    if (deleteMode) {
+        trashBtn.classList.add('active');
+        recordsList.classList.add('delete-mode');
+        document.getElementById('deleteActionBar').style.display = 'flex';
+        selectedRecordsForDelete.clear();
+        updateQueryRecords();
+    } else {
+        trashBtn.classList.remove('active');
+        recordsList.classList.remove('delete-mode');
+        document.getElementById('deleteActionBar').style.display = 'none';
+        selectedRecordsForDelete.clear();
+        updateQueryRecords();
+    }
+}
+
+function toggleRecordSelection(recordId) {
+    if (selectedRecordsForDelete.has(recordId)) {
+        selectedRecordsForDelete.delete(recordId);
+    } else {
+        selectedRecordsForDelete.add(recordId);
+    }
+    document.getElementById('selectedCount').textContent = `${selectedRecordsForDelete.size} selecionados`;
+    updateQueryRecords();
+}
+
+async function deleteSelectedRecords() {
+    if (selectedRecordsForDelete.size === 0) {
+        showToast('Selecione registros para deletar', 'warning');
+        return;
+    }
+    
+    if (!confirm(`Deletar ${selectedRecordsForDelete.size} registro(s)? Esta ação não pode ser desfeita.`)) {
+        return;
+    }
+    
+    try {
+        for (const recordId of selectedRecordsForDelete) {
+            await deleteRecord(recordId);
+        }
+        showToast(`${selectedRecordsForDelete.size} registro(s) deletado(s) com sucesso`, 'success');
+        selectedRecordsForDelete.clear();
+        deleteMode = false;
+        updateQueryRecords();
+        updateDashboard();
+    } catch (error) {
+        console.error('Erro ao deletar:', error);
+        showToast('Erro ao deletar registros', 'error');
+    }
+}
+
+function exportToCSV() {
+    const records = Array.from(document.querySelectorAll('.record-item')).map((el, idx) => {
+        // Extrair dados do elemento
+        return {
+            descricao: el.querySelector('.record-title')?.textContent || '',
+            data: el.querySelector('.record-date')?.textContent || '',
+            valor: el.querySelector('.record-amount')?.textContent || ''
+        };
+    });
+    
+    if (records.length === 0) {
+        showToast('Nenhum registro para exportar', 'warning');
+        return;
+    }
+    
+    getFilteredRecords({
+        year: document.getElementById('filterYear').value,
+        month: document.getElementById('filterMonth').value,
+        cardId: document.getElementById('filterCard').value,
+        classification: document.getElementById('filterClassification').value,
+        person: document.getElementById('filterPerson').value
+    }).then(records => {
+        let csv = 'ANO,MÊS,CARTÃO,VENCIMENTO,DATA,DESCRIÇÃO,CLASSIFICAÇÃO,VALOR TOTAL,PARC. ATUAL,QTD PARCELA,VALOR PARCELA,RESPONSÁVEL\n';
+        
+        records.forEach(r => {
+            csv += `${r.year},${r.month},${r.cardName},${r.vencimento},${r.data},"${r.descricao}",${r.classificacao},${r.valorTotal},${r.parcAtual},${r.qtdParcela},${r.valorParcela},${r.quem}\n`;
+        });
+        
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `controle-cartao-${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        showToast('Exportado para CSV com sucesso', 'success');
+    });
+}
+
+function exportToExcel() {
+    getFilteredRecords({
+        year: document.getElementById('filterYear').value,
+        month: document.getElementById('filterMonth').value,
+        cardId: document.getElementById('filterCard').value,
+        classification: document.getElementById('filterClassification').value,
+        person: document.getElementById('filterPerson').value
+    }).then(records => {
+        if (records.length === 0) {
+            showToast('Nenhum registro para exportar', 'warning');
+            return;
+        }
+        
+        let html = '<table border="1"><tr><th>ANO</th><th>MÊS</th><th>CARTÃO</th><th>VENCIMENTO</th><th>DATA</th><th>DESCRIÇÃO</th><th>CLASSIFICAÇÃO</th><th>VALOR TOTAL</th><th>PARC. ATUAL</th><th>QTD PARCELA</th><th>VALOR PARCELA</th><th>RESPONSÁVEL</th></tr>';
+        
+        records.forEach(r => {
+            html += `<tr><td>${r.year}</td><td>${r.month}</td><td>${r.cardName}</td><td>${r.vencimento}</td><td>${r.data}</td><td>${r.descricao}</td><td>${r.classificacao}</td><td>${r.valorTotal}</td><td>${r.parcAtual}</td><td>${r.qtdParcela}</td><td>${r.valorParcela}</td><td>${r.quem}</td></tr>`;
+        });
+        
+        html += '</table>';
+        
+        const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `controle-cartao-${new Date().toISOString().split('T')[0]}.xls`;
+        link.click();
+        showToast('Exportado para Excel com sucesso', 'success');
+    });
+}
+
+function exportToPDF() {
+    getFilteredRecords({
+        year: document.getElementById('filterYear').value,
+        month: document.getElementById('filterMonth').value,
+        cardId: document.getElementById('filterCard').value,
+        classification: document.getElementById('filterClassification').value,
+        person: document.getElementById('filterPerson').value
+    }).then(records => {
+        if (records.length === 0) {
+            showToast('Nenhum registro para exportar', 'warning');
+            return;
+        }
+        
+        let html = '<h1>Controle de Cartão Anauê</h1>';
+        html += `<p>Data de exportação: ${new Date().toLocaleDateString('pt-BR')}</p>`;
+        html += '<table border="1" cellpadding="5" cellspacing="0" style="width:100%; font-size:10px;">';
+        html += '<tr><th>ANO</th><th>MÊS</th><th>CARTÃO</th><th>DATA</th><th>DESCRIÇÃO</th><th>CLASSIFICAÇÃO</th><th>VALOR</th><th>RESPONSÁVEL</th></tr>';
+        
+        records.forEach(r => {
+            html += `<tr><td>${r.year}</td><td>${r.month}</td><td>${r.cardName}</td><td>${r.data}</td><td>${r.descricao}</td><td>${r.classificacao}</td><td>R$ ${r.valorParcela.toFixed(2)}</td><td>${r.quem}</td></tr>`;
+        });
+        
+        html += '</table>';
+        
+        const printWindow = window.open('', '', 'height=600,width=800');
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.print();
+        showToast('Abrindo PDF para impressão', 'success');
+    });
+}
+
+// ============================================
+// EVENT LISTENERS - EXPORTACAO E DELECAO
+// ============================================
+
+document.getElementById('exportCSVBtn')?.addEventListener('click', exportToCSV);
+document.getElementById('exportExcelBtn')?.addEventListener('click', exportToExcel);
+document.getElementById('exportPDFBtn')?.addEventListener('click', exportToPDF);
+document.getElementById('trashBtn')?.addEventListener('click', () => {
+    toggleDeleteMode();
+    const deleteBar = document.getElementById('deleteActionBar');
+    if (deleteMode) {
+        deleteBar.style.display = 'flex';
+    } else {
+        deleteBar.style.display = 'none';
+    }
+});
+
+document.getElementById('confirmDeleteBtn')?.addEventListener('click', () => {
+    deleteSelectedRecords().then(() => {
+        toggleDeleteMode();
+        document.getElementById('deleteActionBar').style.display = 'none';
+    });
+});
+
+document.getElementById('cancelDeleteBtn')?.addEventListener('click', () => {
+    toggleDeleteMode();
+    document.getElementById('deleteActionBar').style.display = 'none';
+});
+
+// ============================================
+// NAVEGACAO TAB BAR
 // ============================================
 
 document.querySelectorAll('.tab-item').forEach(tab => {
@@ -944,8 +1152,37 @@ document.addEventListener('DOMContentLoaded', async () => {
         updatePurchaseForm();
         updateQueryFilters();
         updateCardsList();
+        
+        // Adicionar listeners de filtros
+        document.getElementById('filterYear')?.addEventListener('change', updateQueryRecords);
+        document.getElementById('filterMonth')?.addEventListener('change', updateQueryRecords);
+        document.getElementById('filterCard')?.addEventListener('change', updateQueryRecords);
+        document.getElementById('filterClassification')?.addEventListener('change', updateQueryRecords);
+        document.getElementById('filterPerson')?.addEventListener('change', updateQueryRecords);
+        document.getElementById('clearFiltersBtn')?.addEventListener('click', () => {
+            document.getElementById('filterYear').value = '';
+            document.getElementById('filterMonth').value = '';
+            document.getElementById('filterCard').value = '';
+            document.getElementById('filterClassification').value = '';
+            document.getElementById('filterPerson').value = '';
+            updateQueryRecords();
+        });
+        
+        document.getElementById('exportCSVBtn')?.addEventListener('click', exportToCSV);
+        document.getElementById('exportExcelBtn')?.addEventListener('click', exportToExcel);
+        document.getElementById('exportPDFBtn')?.addEventListener('click', exportToPDF);
+        document.getElementById('trashBtn')?.addEventListener('click', toggleDeleteMode);
+        document.getElementById('confirmDeleteBtn')?.addEventListener('click', deleteSelectedRecords);
+        document.getElementById('cancelDeleteBtn')?.addEventListener('click', () => {
+            deleteMode = false;
+            selectedRecordsForDelete.clear();
+            document.getElementById('trashBtn').classList.remove('active');
+            document.getElementById('recordsList').classList.remove('delete-mode');
+            document.getElementById('deleteActionBar').style.display = 'none';
+            updateQueryRecords();
+        });
     } catch (error) {
-        console.error('Erro na inicialização:', error);
-        showToast('Erro ao inicializar aplicação', 'error');
+        console.error('Erro na inicializacao:', error);
+        showToast('Erro ao inicializar aplicacao', 'error');
     }
 });
